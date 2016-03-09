@@ -30,7 +30,7 @@ void transmit_row(unsigned char data) {
 		PORTA = 0x20 + prev_A;
 		PORTA |= ((data >> i) & 0x01) << 2;
 		PORTA |= 0x10;
-	}rma
+	}
 	PORTA |= 0x08 + prev_A;
 }
 //shift register for 7seg

@@ -30,10 +30,52 @@ void transmit_row(unsigned char data) {
 		PORTA = 0x20 + prev_A;
 		PORTA |= ((data >> i) & 0x01) << 2;
 		PORTA |= 0x10;
-	}
+	}rma
 	PORTA |= 0x08 + prev_A;
 }
+//shift register for 7seg
+void transmit_seg(unsigned char data) {
+	int i;
+	unsigned char prev_A = (PORTA & 0x3F);
+	unsigned char prev_B = (PORTB & 0xCF);
+	for (i = 7; i >= 0; --i) {
+		PORTB = 0x20 + prev_B;
+		PORTA = (((data >> i) & 0x01) << 6);
+		PORTB |= 0x10;
+	}
+	PORTA |= 0x80;
+	PORTA = prev_A;
+	PORTB = prev_B;
+	
+}
 
+void convert_to_seg(unsigned char digit) {
+	
+	if (digit == '0')
+		transmit_seg(0xC0);
+	else if (digit == '1')
+		transmit_seg(0xF9);
+	else if (digit == '2')
+		transmit_seg(0xA4);
+	else if (digit == '3')
+		transmit_seg(0xB0);
+	else if (digit == '4')
+		transmit_seg(0x99);
+	else if (digit == '5')
+		transmit_seg(0x92);
+	else if (digit == '6')
+		transmit_seg(0x82);
+	else if (digit == '7')
+		transmit_seg(0xF8);
+	else if (digit == '8')
+		transmit_seg(0x00);
+	else if (digit == '9')
+		transmit_seg(0x98);
+	else if (digit == 'A')
+		transmit_seg(0x08);
+	else
+		transmit_seg(0xFF);	
+}
 
 //PWM on B6
 void set_PWM(double frequency) {

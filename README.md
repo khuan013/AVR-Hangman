@@ -18,6 +18,8 @@ Overview
 Custom hangman game created using the ATmega1284 micrcontroller
 Utilizes shift registers to handle pin connections, a 8x8 LED matrix, LCD display, speaker, keypad, and 7seg.
 
+[![IMAGE ALT TEXT](http://i.imgur.com/jv0T6Ye.jpg)](https://youtube.com/watch?v=AusnKZ1tOjw "CS120B Hangman")
+
 Instructions on how to deploy the system
 -------
 

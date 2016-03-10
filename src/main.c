@@ -10,29 +10,34 @@
 #include <stdlib.h>
 
 
+
 // LEDMATRIX shift register functions
 // portB 0-4
 void transmit_col(unsigned char data) {
 	int i;
+	unsigned char prev_B =(PORTB & 0xF0);
 	for (i = 7; i >= 0; --i) {
-		PORTB = 0x08;
+		PORTB = 0x08 + prev_B;
 		PORTB |= ((data >> i) & 0x01);
 		PORTB |= 0x04;
 	}
 	PORTB |= 0x02;
-	PORTB = 0x00;
+	PORTB &= 0xF0;
 }
 // portA 2-6
 void transmit_row(unsigned char data) {
 	int i;
-	unsigned char prev_A = (PORTA & 0x03);
+	unsigned char prev_A = (PORTA & 0xA3);
 	for (i = 7; i >= 0; --i) {
 		PORTA = 0x20 + prev_A;
 		PORTA |= ((data >> i) & 0x01) << 2;
 		PORTA |= 0x10;
 	}
-	PORTA |= 0x08 + prev_A;
+	PORTA |= 0x08;
+	PORTA &= 0xA3;
 }
+
+
 //shift register for 7seg
 void transmit_seg(unsigned char data) {
 	int i;
@@ -49,32 +54,38 @@ void transmit_seg(unsigned char data) {
 	
 }
 
-void convert_to_seg(unsigned char digit) {
+int last_sent = -1;
+void display_seg(int digit) {
 	
-	if (digit == '0')
-		transmit_seg(0xC0);
-	else if (digit == '1')
-		transmit_seg(0xF9);
-	else if (digit == '2')
-		transmit_seg(0xA4);
-	else if (digit == '3')
-		transmit_seg(0xB0);
-	else if (digit == '4')
-		transmit_seg(0x99);
-	else if (digit == '5')
-		transmit_seg(0x92);
-	else if (digit == '6')
-		transmit_seg(0x82);
-	else if (digit == '7')
-		transmit_seg(0xF8);
-	else if (digit == '8')
-		transmit_seg(0x00);
-	else if (digit == '9')
-		transmit_seg(0x98);
-	else if (digit == 'A')
-		transmit_seg(0x08);
-	else
-		transmit_seg(0xFF);	
+	if (digit != last_sent) {
+	
+		last_sent = digit;
+		
+		if (digit == 0)
+			transmit_seg(0xC0);
+		else if (digit == 1)
+			transmit_seg(0xF9);
+		else if (digit == 2)
+			transmit_seg(0xA4);
+		else if (digit == 3)
+			transmit_seg(0xB0);
+		else if (digit == 4)
+			transmit_seg(0x99);
+		else if (digit == 5)
+			transmit_seg(0x92);
+		else if (digit == 6)
+			transmit_seg(0x82);
+		else if (digit == 7)
+			transmit_seg(0xF8);
+		else if (digit == 8)
+			transmit_seg(0x00);
+		else if (digit == 9)
+			transmit_seg(0x98);
+		else if (digit == 10)
+			transmit_seg(0x08);
+		else
+			transmit_seg(0xFF);
+	}
 }
 
 //PWM on B6
@@ -160,6 +171,10 @@ int startpause = 0;
 int alph_index = 0;
 int a_press = 0;
 int title_song = 0;
+int mode_no = 0; //controls game mode
+int mode_press = 0;
+int play_song = 0;
+int title_off = 0;
 
 // Keypad function
 enum KP_States { KP_wait,  wait_release};
@@ -169,24 +184,37 @@ int KP_Tick(int state) {
 		case KP_wait:
 			if (GetKeypadKey()) {
 				key = GetKeypadKey();
-				if (key == '*')
+				if (key == 'D')
 					startpause = 1;
-				
-				else if (key == '1') {
+				else if (key == '2') {
+					alph_index--;
+					if (alph_index < 0)
+					alph_index = 25;
+				}
+				else if (key == '3') {
 					alph_index++;
 					if (alph_index >= 26)
 						alph_index = 0;
 				}
-				else if (key == '2') {
-					alph_index--;
-					if (alph_index < 0)
-						alph_index = 25;
-				}
 				else if (key == 'A') {
 					a_press = 1;
 				}
-				else if (key == 'D') {
-					title_song = 0;
+				else if (key == 'B') {
+					mode_press = 1;
+					if (mode_no == 0)
+						mode_no = 1;
+					else
+						mode_no = 0;
+				}
+				else if (key == 'C') {
+					// play song for music mode
+					play_song = 1;
+				}
+				else if (key == '#') {
+					if (title_off == 0)
+						title_off = 1;
+					else
+						title_off = 0;
 				}
 				
 				state = wait_release;
@@ -210,15 +238,23 @@ int KP_Tick(int state) {
 	
 
 // Words used for hangman
-const char *a[] = {"hello", "world", "money", "tiger"};
+const char *a[] = {"hello", "world", "monkey", "tiger"};
+const char *b[] = {"indiana jones", "star wars", "titanic", "game of thrones" };
+char ** p = 0;
 const int WORD_BANK = 4; // word bank size
 int sp_word = 0; //chooses the word to play
+
+
+const char *mode_str[] = {"Normal mode", "Music mode"};
+
 enum DP_States { DP_wait, wait_game, START, PLAY, LOSE, WIN, WAITPRESS};
 
 // alphabet
 const char alphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
 						'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
 						't', 'u', 'v', 'w', 'x', 'y', 'z'};
+
+int letter_used[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 //variables to determine which sound to play
 int speaker_on = 0;
@@ -230,6 +266,7 @@ int pressed_sound=0;
 // keep track of correct/incorrect guesses
 int num_wrong = 0;
 int num_right = 0;
+int num_spaces = 0;
 
 int string_length = 0;
 int r = 0;
@@ -246,23 +283,49 @@ int DP_Tick(int state) {
 			num_right = 0;
 			num_wrong = 0;
 			alph_index = 0;			
+			num_spaces = 0;
+			
+			//reset used letters array
+			for (int i = 0; i < 26; i++) 
+				letter_used[i] = 0;
 			
 			// play title
-			title_song = 1;
-			speaker_on = 1;			
+			if (title_off == 0) {
+				title_song = 1;
+				speaker_on = 1;		
+			}
+			else
+				title_song = 0;
 
 			//ledmat
 			gamestart = 0;
 			
 			//initial display
-			LCD_DisplayString(1, "Hangman- Press *");	
+			LCD_DisplayString(1, "Hangman- Press D");
+			int mode_len = strlen(mode_str[mode_no]);
+			LCD_Cursor(17);
+			for (int i = 0; i < mode_len; i++) {
+				LCD_Cursor(17+i);
+				LCD_WriteData(mode_str[mode_no][i]);
+			}
+				
 			state = wait_game;		
 			break;
 		case wait_game:
+			if (title_off)
+				title_song = 0;
+			else {
+				title_song = 1;
+				speaker_on = 1;
+			}
+		
 			if (startpause == 1) {
-				LCD_ClearScreen();
 				state = START;
 				startpause = 0;
+			}
+			else if (mode_press == 1) {
+				mode_press = 0;
+				state = DP_wait;
 			}
 			else
 				state = wait_game;
@@ -273,15 +336,28 @@ int DP_Tick(int state) {
 			// turn off title_song, setup led matrix
 			title_song = 0;
 			gamestart = 1;
+			
+			//set up pointer
+			if (mode_no == 0)
+				p = a;
+			else
+				p = b;
+			
+			LCD_ClearScreen();
 		
 			// randomize the word in play
 			r = random() % WORD_BANK;
-			string_length = strlen(a[r]);
+			string_length = strlen(p[r]);
 			
 			//display '-' for each character in the word			
 			for (int i = 1; i <= string_length; i++) {
 				LCD_Cursor(i);
-				LCD_WriteData('-');
+				if (p[r][i-1] == ' ') {
+					LCD_WriteData(' ');
+					num_spaces++;
+				}
+				else
+					LCD_WriteData('-');
 			}
 			
 			state = PLAY;
@@ -291,6 +367,10 @@ int DP_Tick(int state) {
 			// display current selected character
 			LCD_Cursor(32);
 			LCD_WriteData(alphabet[alph_index]);
+			
+			
+			if (play_song && mode_no)
+				speaker_on = 1;
 		
 			//pause
 			if (startpause == 1) {
@@ -304,33 +384,37 @@ int DP_Tick(int state) {
 				a_press = 0;
 				pressed_sound = 1;
 				
-				int no_matches = 0; // keeps track of number of matches
-				// iterate through word to check if character exists
-				for (int i = 0; i < string_length; i++) {
-					if (a[r][i] == alphabet[alph_index]) {
-						//num_right++;
-						LCD_Cursor(i+1);
+				if (letter_used[alph_index] == 0) {
+					
+					letter_used[alph_index]=1;
+				
+					int no_matches = 0; // keeps track of number of matches
+					// iterate through word to check if character exists
+					for (int i = 0; i < string_length; i++) {
+						if (p[r][i] == alphabet[alph_index]) {
+							num_right++;
+							LCD_Cursor(i+1);
+							LCD_WriteData(alphabet[alph_index]);
+							speaker_on = 1;
+							goodorbad = 1;
+						}
+						else {
+							no_matches++;
+						}
+						
+					}
+					if (no_matches == string_length) {
+						LCD_Cursor(17 + num_wrong);
+						num_wrong++;
 						LCD_WriteData(alphabet[alph_index]);
 						speaker_on = 1;
-						goodorbad = 1;
+						goodorbad = 0;		
 					}
-					else {
-						no_matches++;
-					}
-						
 				}
-				if (no_matches == string_length) {
-					LCD_Cursor(17 + num_wrong);
-					num_wrong++;
-					LCD_WriteData(alphabet[alph_index]);
-					speaker_on = 1;
-					goodorbad = 0;		
-				}
-				else
-					num_right++;
+				
 			}
 			//win condition
-			else if (num_right == string_length) {
+			else if (num_right >= (string_length - num_spaces)) {
 				state = WIN;
 				win_game = 1;
 			}
@@ -348,7 +432,7 @@ int DP_Tick(int state) {
 				LCD_DisplayString(17, "YOU LOSE!!!");
 				for (int i=0; i < string_length; i++) {
 					LCD_Cursor(i+1);
-					LCD_WriteData(a[r][i]);
+					LCD_WriteData(p[r][i]);
 				}
 				LCD_Cursor(32);
 				state = WAITPRESS;
@@ -359,7 +443,7 @@ int DP_Tick(int state) {
 				LCD_DisplayString(17, "YOU WIN!!!");
 				for (int i=0; i < string_length; i++) {
 					LCD_Cursor(i+1);
-					LCD_WriteData(a[r][i]);
+					LCD_WriteData(p[r][i]);
 				}
 				LCD_Cursor(32);
 				state = WAITPRESS;
@@ -401,9 +485,20 @@ double fairy_fount[] = {1760.00, 1174.66, 987.77, 783.99, 1567.98, 1174.66, 987.
 						1760.00, 1174.66, 987.77, 783.99, 1567.98, 1174.66, 987.77, 783.99, 1470.98, 1174.66, 987.77, 783.99, 1567.98, 1174.66, 987.77, 783.99,
 						1864.66, 1244.51, 1046.50, 739.99, 1760.00, 1244.51, 1046.50, 739.99, 1661.22, 1244.51, 1046.50, 739.99, 1760.00, 1244.51, 1046.50, 739.99,
 						2093.00, 1174.66, 932.33, 783.99, 1864.66, 1174.66, 932.33, 783.99, 1760, 1174.66, 932.33, 783.99, 1864.66, 1174.66, 932.33, 783.99,
-						1760.00, 932.33, 783.99, 659.25, 1567.98, 932.33, 783.99, 659.25, 1396.91, 932.33, 783.99, 659.25, 1318.51, 932.33, 783.99, 659.25};
-							
+						1760.00, 932.33, 783.99, 659.25, 1567.98, 932.33, 783.99, 659.25, 1396.91, 932.33, 783.99, 659.25, 1318.51, 932.33, 783.99, 659.25};							
 int fairy_number = 25;
+	
+double game_thrones[] = {783.99, 523.25, 622.25, 698.46, 783.99, 523.25, 622.25, 698.46, 587.33}; //9	
+int gt_numbers[] = {150, 150, 25, 25, 100, 100, 25, 25, 200};
+	
+double ind_jones[] = {659.25, 698.46, 783.99, 1046.50, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1396.91, 880.00, 987.77, 1046.50, 1174.66, 1318.51 };//16
+int ij_numbers[] = {60, 20, 40, 200, 60, 20, 240, 60, 20, 40, 200, 60, 20, 80, 80, 80};
+	
+double titanic_heart[] = {659.25, 0, 659.25, 0, 659.25, 0,  659.25, 622.25, 659.25, 0, 659.25, 622.25, 659.25, 0,  739.99, 830.61, 739.99}; //17
+double tt_numbers[] = {140, 10, 45, 5, 90, 10, 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 100 };
+	
+double star_wars[] = {293.66, 0, 293.66, 0, 293.66, 392.00, 587.33, 523.25, 493.88, 440.00, 783.99, 587.33, 523.25, 493.88, 440.00, 783.99, 587.33, 523.25, 493.88, 523.25, 440.00}; //21
+double sw_numbers[] = {27, 3, 27, 3, 30, 180, 180, 30, 30, 30, 180, 90, 30, 30, 30, 180, 90, 30, 30, 30, 180};
 	
 // SM for speaker output
 enum SP_States{ SP_wait, output} SP_state;
@@ -441,6 +536,59 @@ int SP_Tick(state) {
 					count = 0;
 				}
 				
+			}
+			
+			else if (play_song) {
+				if (r == 0) {
+					set_PWM(ind_jones[count]);
+					if (ind > ij_numbers[count]) {
+						count++;
+						ind = 0;
+					}
+					if (count >= 16) {
+						state = SP_wait;
+						play_song = 0;
+						break;
+					}
+				}
+				else if (r == 1) {
+					set_PWM(star_wars[count]);
+					if (ind > sw_numbers[count]) {
+						count++;
+						ind = 0;
+					}
+					if (count >= 21) {
+						state = SP_wait;
+						play_song = 0;
+						break;
+					}
+				}
+				else if (r == 2) {
+					set_PWM(titanic_heart[count]);
+					if (ind > tt_numbers[count]) {
+						count++;
+						ind = 0;
+					}
+					if (count >= 17) {
+						state = SP_wait;
+						play_song = 0;
+						break;
+					}
+				}
+				else if (r == 3) {
+					set_PWM(game_thrones[count]);
+					if (ind > gt_numbers[count]) {
+						count++;
+						ind = 0;
+					}
+					if (count >= 9) {
+						state = SP_wait;
+						play_song = 0;
+						break;
+					}
+				}
+				
+					
 			}
 			
 			else if (win_game) {
@@ -544,7 +692,7 @@ int LD_Tick(state) {
 				state = LD_play;
 				break;}
 			for (int i = 0; i < 8; i++) {
-				unsigned char temp = 0xFF;
+				
 				transmit_row(rows[i]);
 
 				transmit_col(cols1[i]);
@@ -552,6 +700,7 @@ int LD_Tick(state) {
 				transmit_row(0x00);
 				transmit_col(0xFF);
 			}
+			display_seg(-1);
 		
 			
 			break;
@@ -561,9 +710,9 @@ int LD_Tick(state) {
 				state = LD_wait;
 				break;	
 			}
-				
+			display_seg(10 - num_wrong);
 			for (int i = 0; i < 8; i++) {
-				unsigned char temp = 0xFF;
+				
 				transmit_row(rows[i]);
 
 				transmit_col(cols2[num_wrong][i]);
@@ -589,7 +738,7 @@ int LD_Tick(state) {
 					j = 5;
 					
 				for (int i = 0; i < 8; i++) {
-					unsigned char temp = 0xFF;
+					
 					transmit_row(rows[i]);
 
 					transmit_col(cols3[j][i]);
@@ -607,7 +756,7 @@ int LD_Tick(state) {
 	return state;
 }
 
-int main(void)
+int main(void) 
 {
 	
 	
@@ -654,4 +803,5 @@ int main(void)
 	while(1) {
 	//loop
 	}
+	
 }
